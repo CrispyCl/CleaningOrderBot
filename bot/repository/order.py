@@ -78,7 +78,12 @@ class OrderRepository:
         async with self.db.get_session() as session:
             session: AsyncSession
             try:
-                stmt = select(Order).filter(Order.status == OrderStatus.pending).order_by(Order.id)
+                stmt = (
+                    select(Order)
+                    .filter(Order.status == OrderStatus.pending)
+                    .options(joinedload(Order.author))
+                    .order_by(Order.id)
+                )
                 result = await session.execute(stmt)
 
                 return list(result.scalars().all())

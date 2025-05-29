@@ -10,7 +10,8 @@ from database import Base
 class OrderStatus(PyEnum):
     pending = "pending"
     accepted = "accepted"
-    executed = "executed"
+    completed = "completed"
+    rejected = "rejected"
     canceled = "canceled"
 
 
@@ -22,6 +23,7 @@ class Order(Base):
     address: Mapped[str] = mapped_column(String(255), nullable=False)
     time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     status: Mapped[OrderStatus] = mapped_column(SqlEnum(OrderStatus), default=OrderStatus.pending)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=True)
 
     author = relationship("User")
 
