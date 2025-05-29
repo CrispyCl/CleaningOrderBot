@@ -1,6 +1,34 @@
 version: '3.8'
 
 services:
+  bot:
+    image: cleaning_order_bot:latest
+    container_name: bot
+    build:
+      context: .
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      DEBUG: ${DEBUG} 
+      LOGGER_FILE_PATH: /app/logs/app.log
+
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT}
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   postgres:
     image: postgres:15
     container_name: cleaning_order_postgres

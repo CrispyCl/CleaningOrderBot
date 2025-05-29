@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import select
+from sqlalchemy import asc, desc, select
 from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -53,7 +53,7 @@ class OrderRepository:
         async with self.db.get_session() as session:
             session: AsyncSession
             try:
-                stmt = select(Order).order_by(Order.id)
+                stmt = select(Order).order_by(desc(Order.id))
                 result = await session.execute(stmt)
 
                 return list(result.scalars().all())
@@ -65,7 +65,7 @@ class OrderRepository:
         async with self.db.get_session() as session:
             session: AsyncSession
             try:
-                stmt = select(Order).options(joinedload(Order.author)).order_by(Order.id)
+                stmt = select(Order).options(joinedload(Order.author)).order_by(desc(Order.id))
                 result = await session.execute(stmt)
 
                 return list(result.scalars().all())
@@ -82,7 +82,7 @@ class OrderRepository:
                     select(Order)
                     .filter(Order.status == OrderStatus.pending)
                     .options(joinedload(Order.author))
-                    .order_by(Order.id)
+                    .order_by(asc(Order.time))
                 )
                 result = await session.execute(stmt)
 
@@ -96,7 +96,7 @@ class OrderRepository:
         async with self.db.get_session() as session:
             session: AsyncSession
             try:
-                stmt = select(Order).filter(Order.author_id == author_id).order_by(Order.id)
+                stmt = select(Order).filter(Order.author_id == author_id).order_by(desc(Order.id))
                 result = await session.execute(stmt)
 
                 return list(result.scalars().all())
