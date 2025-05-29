@@ -14,8 +14,8 @@ from handlers import commands_router
 from keyboards import setup_menu
 from logger import get_logger
 from middleware import setup as setup_middlewares
-from repository import UserRepository
-from service import UserService
+from repository import OrderRepository, UserRepository
+from service import OrderService, UserService
 
 
 async def shutdown(
@@ -97,10 +97,13 @@ async def main() -> None:
 
     logger.debug("Registering repositories...")
     user_repository = UserRepository(db)
+    order_reposiitory = OrderRepository(db)
 
     logger.debug("Registering services...")
     user_service = UserService(user_repository, logger)
     dp.workflow_data["user_service"] = user_service
+    order_service = OrderService(order_reposiitory, logger)
+    dp.workflow_data["order_service"] = order_service
 
     logger.debug("Registering routers...")
     dp.include_router(commands_router)

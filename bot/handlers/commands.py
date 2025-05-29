@@ -16,7 +16,6 @@ async def to_main_menu(callback: CallbackQuery, state: FSMContext, current_user:
 
 
 @router.message(CommandStart())
-@router.message(F.text == "🏠 На главную")
 async def process_start_command(message: Message, state: FSMContext) -> None:
     await state.clear()
 

@@ -1,14 +1,14 @@
 from logging.config import fileConfig
 
+from alembic import context
+import alembic_postgresql_enum  # noqa: F401
 from sqlalchemy import create_engine
 from sqlalchemy import pool
 
-from alembic import context
-import alembic_postgresql_enum  # noqa: F401
-
 from config import load_config
 from database import Base
-from models import User  # noqa: F401
+from models import Order, User  # noqa: F401
+
 
 db_config = load_config()
 database_url = db_config.postgres.get_database_url()
@@ -42,3 +42,6 @@ def run_migrations_online() -> None:
 
 
 run_migrations_online()
+
+
+__all__ = ["run_migrations_online"]
