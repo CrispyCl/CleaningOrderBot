@@ -1,3 +1,7 @@
+import asyncio
+import csv
+from datetime import datetime
+import io
 from logging import Logger
 from typing import Optional
 
@@ -6,6 +10,7 @@ from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -97,7 +102,7 @@ async def show_orders_page(
     if delete_message:
         await callback.message.delete()  # type: ignore
     """Отображение страницы с заявками"""
-    if status_filter:
+    if status_filter == "pending":
         orders = await order_service.get_pending()
         title = "📋 Новые заявки"
     else:
@@ -157,9 +162,9 @@ async def show_orders_page(
     if nav_buttons:
         keyboard.append(nav_buttons)
 
-    # Кнопки управления
     keyboard.append(
         [
+            InlineKeyboardButton(text="📤 Экспорт", callback_data=f"admin_export_{status_filter or 'all'}_{page}"),
             InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_refresh"),
             InlineKeyboardButton(text="◀️ Назад", callback_data="admin_panel"),
         ],
@@ -170,6 +175,49 @@ async def show_orders_page(
     await callback.message.answer(text, reply_markup=markup)  # type: ignore
     await callback.answer()
     return UNHANDLED
+
+
+@router.callback_query(F.data.startswith("admin_export_"))
+async def export_orders(callback: CallbackQuery, state: FSMContext, order_service: OrderService):
+    parts = str(callback.data).split("_")
+    page = int(parts[3])
+    status_filter = parts[2]
+
+    if status_filter == "pending":
+        orders = await order_service.get_pending()
+        filename = "pending_orders_"
+    else:
+        orders = await order_service.get(with_author=True)
+        filename = "all_orders_<"
+    filename += datetime.now().strftime("%d-%m-%Y") + ">.csv"
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+
+    writer.writerow(["ID", "User ID", "Username", "Phone", "Address", "Order Time", "Status", "Created At"])
+
+    for order in orders:
+        username = f"@{order.author.username}" if order.author and order.author.username else ""
+        phone = order.author.phone_number if order.author and order.author.phone_number else ""
+
+        order_time = order.time.strftime("%Y-%m-%d %H:%M:%S")
+        created_at = order.created_at.strftime("%Y-%m-%d %H:%M:%S") if order.created_at else ""
+
+        writer.writerow(
+            [order.id, order.author_id, username, phone, order.address, order_time, order.status.value, created_at],
+        )
+
+    csv_data = buffer.getvalue().encode("utf-8")
+    file = BufferedInputFile(csv_data, filename=filename)
+
+    await callback.message.answer_document(  # type: ignore
+        document=file,
+        caption=f"Экспорт заказов ({'ожидают ответа' if status_filter == 'pending' else 'все'})",
+    )
+    await callback.answer("📤 Файл экспортирован")
+
+    await asyncio.sleep(5)
+    await show_orders_page(callback, state, order_service, status_filter, page, False)
 
 
 @router.callback_query(F.data.startswith("admin_page_"))
