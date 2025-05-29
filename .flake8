@@ -1,0 +1,8 @@
+[flake8]
+exclude = .git, __pycache__, venv, alembic
+max-complexity = 12
+import-order-style = google
+application-import-names = config, handlers, filters, fsm, logger, database, models, middleware, keyboards, utils, repository, service
+max-line-length = 120
+black-config = pyproject.toml
+inline-quotes = "
