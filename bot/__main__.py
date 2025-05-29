@@ -10,7 +10,7 @@ from redis.asyncio.client import Redis
 
 from config import Config, load_config
 from database import DefaultDatabase, PostgresDatabase
-from handlers import commands_router
+from handlers import commands_router, order_router
 from keyboards import setup_menu
 from logger import get_logger
 from middleware import setup as setup_middlewares
@@ -107,6 +107,7 @@ async def main() -> None:
 
     logger.debug("Registering routers...")
     dp.include_router(commands_router)
+    dp.include_router(order_router)
 
     logger.debug("Registering middlewares...")
     setup_middlewares(dp, logger, user_service=user_service)

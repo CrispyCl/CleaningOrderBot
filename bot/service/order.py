@@ -19,7 +19,7 @@ class OrderService:
         self.repo = repository
         self.log = logger
 
-    async def create(self, author_id: str, address: str, time: datetime, status: str) -> Optional[int]:
+    async def create(self, author_id: str, address: str, time: datetime, status: str = "pending") -> Optional[int]:
         try:
             return await self.repo.create(author_id, address, time, OrderStatus(status))
 
