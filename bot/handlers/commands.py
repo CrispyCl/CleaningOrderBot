@@ -74,4 +74,12 @@ async def help_callback(message: Message, current_user: User) -> None:
     await message.answer(help_text, reply_markup=keyboard)
 
 
+@router.message(Command("order"))
+async def quick_order_command(message: Message, state: FSMContext, current_user: User) -> None:
+    """Быстрое оформление заказа через команду"""
+    from handlers.order import start_order_hander
+
+    await start_order_hander(message, state, current_user)
+
+
 __all__ = ["router"]

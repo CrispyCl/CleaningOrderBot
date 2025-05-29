@@ -1,7 +1,8 @@
 import calendar
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import F, Router
+from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -12,9 +13,9 @@ from aiogram.types import (
     Message,
 )
 
-from keyboards import ToMainMenuKeyboard, ToMainOrOrderKeyboard
+from keyboards import RequestPhoneNumberKeyboard, ToMainMenuKeyboard, ToMainOrOrderKeyboard
 from models import User
-from service import OrderService
+from service import OrderService, UserService
 
 router = Router()
 
@@ -26,8 +27,54 @@ class OrderStates(StatesGroup):
     confirmation = State()
 
 
+async def phone_required(event, current_user: User) -> bool:
+    if current_user and not current_user.phone_number:
+        # Получаем message или callback из аргументов
+        if event:
+            await request_phone_number(event)
+            return True
+
+    return False
+
+
+async def request_phone_number(event):
+    """Запрос номера телефона у пользователя"""
+    text = (
+        "📱 <b>Требуется номер телефона</b>\n\n"
+        "Для оформления заказа необходимо предоставить ваш номер телефона.\n"
+        "Нажмите кнопку ниже, чтобы поделиться номером:"
+    )
+
+    keyboard = RequestPhoneNumberKeyboard()()
+
+    if isinstance(event, Message):
+        await event.answer(text, reply_markup=keyboard)
+    elif isinstance(event, CallbackQuery):
+        await event.message.answer(text, reply_markup=keyboard)  # type: ignore
+        await event.answer("Необходимо предоставить номер телефона")
+
+
+@router.message(F.contact)
+async def process_contact(message: Message, current_user: User, user_service: UserService):
+    """Обработка полученного контакта"""
+    if message.contact and str(message.contact.user_id) == current_user.id:
+        await user_service.update_phone_number(current_user.id, message.contact.phone_number)
+
+        await message.answer(
+            "✅ <b>Спасибо!</b>\n\n" "Ваш номер телефона сохранен. Теперь вы можете пользоваться всеми функциями бота.",
+            reply_markup=ToMainMenuKeyboard()(),
+        )
+    else:
+        await message.answer(
+            "❌ Пожалуйста, поделитесь своим номером телефона, используя кнопку ниже.",
+            reply_markup=RequestPhoneNumberKeyboard()(),
+        )
+
+
 @router.message(F.text == "🛒 Оформить заказ")
-async def start_order_hander(message: Message, state: FSMContext):
+async def start_order_hander(message: Message, state: FSMContext, current_user: User):
+    if await phone_required(message, current_user):
+        return
     await start_order_process(message, state, edit_message=False)
 
 
@@ -52,6 +99,7 @@ async def start_order_process(message: MaybeInaccessibleMessageUnion, state: FSM
 @router.callback_query(F.data == "back_to_address")
 async def back_to_address(callback: CallbackQuery, state: FSMContext):
     await start_order_process(callback.message, state, edit_message=False)  # type: ignore
+    await callback.answer()
 
 
 @router.message(OrderStates.waiting_for_address)
@@ -70,7 +118,8 @@ async def process_address(message: Message, state: FSMContext):
     await state.set_state(OrderStates.waiting_for_date)
 
     # Создаем календарь для выбора даты
-    keyboard = create_calendar_keyboard()
+    today = datetime.now()
+    keyboard = create_calendar_keyboard(today.year, today.month)
 
     await message.answer(
         "📅 <b>Шаг 2 из 3: Дата</b>\n\n" f"Адрес: <i>{address}</i>\n\n" "Выберите удобную дату для уборки:",
@@ -84,7 +133,8 @@ async def back_to_date(callback: CallbackQuery, state: FSMContext):
     await state.set_state(OrderStates.waiting_for_date)
 
     data = await state.get_data()
-    keyboard = create_calendar_keyboard()
+    today = datetime.now()
+    keyboard = create_calendar_keyboard(today.year, today.month)
 
     await callback.message.answer(  # type: ignore
         "📅 <b>Шаг 2 из 3: Дата</b>\n\n" f"Адрес: <i>{data['address']}</i>\n\n" "Выберите удобную дату для уборки:",
@@ -93,21 +143,99 @@ async def back_to_date(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-def create_calendar_keyboard():
-    """Создание клавиатуры-календаря"""
+@router.callback_query(F.data.startswith("calendar_"))
+async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext):
+    """Обработка навигации по календарю"""
+    action = str(callback.data).split("_")[1]
+    year = int(str(callback.data).split("_")[2])
+    month = int(str(callback.data).split("_")[3])
+
+    if action == "prev":
+        # Переход к предыдущему месяцу
+        if month == 1:
+            month = 12
+            year -= 1
+        else:
+            month -= 1
+    elif action == "next":
+        # Переход к следующему месяцу
+        if month == 12:
+            month = 1
+            year += 1
+        else:
+            month += 1
+
+    # Ограничиваем навигацию (не позволяем уходить в прошлое дальше текущего месяца)
+    today = datetime.now()
+    target_date = datetime(year, month, 1)
+    current_month = datetime(today.year, today.month, 1)
+
+    if target_date < current_month:
+        await callback.answer("❌ Нельзя выбрать прошедший месяц")
+        return UNHANDLED
+
+    keyboard = create_calendar_keyboard(year, month)
+
+    data = await state.get_data()
+    await callback.message.answer(  # type: ignore
+        "📅 <b>Шаг 2 из 3: Дата</b>\n\n" f"Адрес: <i>{data['address']}</i>\n\n" "Выберите удобную дату для уборки:",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+    return UNHANDLED
+
+
+def create_calendar_keyboard(year: int, month: int):
+    """Создание клавиатуры-календаря для указанного месяца и года"""
     today = datetime.now()
     keyboard = []
 
     # Заголовок с месяцем и годом
-    month_year = today.strftime("%B %Y")
-    keyboard.append([InlineKeyboardButton(text=f"📅 {month_year}", callback_data="ignore")])
+    month_names = {
+        1: "Январь",
+        2: "Февраль",
+        3: "Март",
+        4: "Апрель",
+        5: "Май",
+        6: "Июнь",
+        7: "Июль",
+        8: "Август",
+        9: "Сентябрь",
+        10: "Октябрь",
+        11: "Ноябрь",
+        12: "Декабрь",
+    }
+    month_year = f"{month_names[month]} {year}"
+
+    # Кнопки навигации по месяцам
+    nav_row = []
+
+    # Кнопка "предыдущий месяц" (показываем только если это не текущий месяц)
+    current_month_date = datetime(today.year, today.month, 1)
+    target_month_date = datetime(year, month, 1)
+
+    if target_month_date > current_month_date:
+        nav_row.append(InlineKeyboardButton(text="◀️", callback_data=f"calendar_prev_{year}_{month}"))
+    else:
+        nav_row.append(InlineKeyboardButton(text=" ", callback_data="ignore"))
+
+    nav_row.append(InlineKeyboardButton(text=f"📅 {month_year}", callback_data="ignore"))
+
+    # Кнопка "следующий месяц" (ограничиваем 6 месяцами)
+    max_date = current_month_date + timedelta(days=180)
+    if target_month_date < max_date:
+        nav_row.append(InlineKeyboardButton(text="▶️", callback_data=f"calendar_next_{year}_{month}"))
+    else:
+        nav_row.append(InlineKeyboardButton(text=" ", callback_data="ignore"))
+
+    keyboard.append(nav_row)
 
     # Дни недели
     weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     keyboard.append([InlineKeyboardButton(text=day, callback_data="ignore") for day in weekdays])
 
-    # Получаем календарь текущего месяца
-    cal = calendar.monthcalendar(today.year, today.month)
+    # Получаем календарь указанного месяца
+    cal = calendar.monthcalendar(year, month)
 
     for week in cal:
         week_buttons = []
@@ -115,8 +243,10 @@ def create_calendar_keyboard():
             if day == 0:
                 week_buttons.append(InlineKeyboardButton(text=" ", callback_data="ignore"))
             else:
-                date_obj = datetime(today.year, today.month, day)
-                if date_obj >= today:
+                date_obj = datetime(year, month, day)
+
+                # Проверяем, что дата не в прошлом
+                if date_obj.date() > today.date() and date_obj.date() <= today.date() + timedelta(days=180):
                     week_buttons.append(
                         InlineKeyboardButton(text=str(day), callback_data=f"date_{date_obj.strftime('%Y-%m-%d')}"),
                     )
@@ -335,6 +465,7 @@ async def cancel_existing_order(callback: CallbackQuery, current_user: User, ord
 async def ignore_callback(callback: CallbackQuery):
     """Игнорирование нажатий на неактивные кнопки"""
     await callback.answer()
+    return UNHANDLED
 
 
-__all__ = ["router"]
+__all__ = ["router", "start_order_hander"]

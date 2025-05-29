@@ -7,6 +7,7 @@ async def setup_menu(bot: Bot):
         [
             BotCommand(command="start", description="Перезапустить бота"),
             BotCommand(command="help", description="Информация о боте"),
+            BotCommand(command="order", description="Сделать заказ"),
         ],
     )
 

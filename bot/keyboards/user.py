@@ -30,4 +30,15 @@ class ToMainOrOrderKeyboard:
         )
 
 
-__all__ = ["MainUserKeyboard", "ToMainMenuKeyboard"]
+class RequestPhoneNumberKeyboard:
+    def __call__(self) -> ReplyKeyboardMarkup:
+        return ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📱 Поделиться номером", request_contact=True)],
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+
+
+__all__ = ["MainUserKeyboard", "ToMainMenuKeyboard", "ToMainOrOrderKeyboard", "RequestPhoneNumberKeyboard"]
