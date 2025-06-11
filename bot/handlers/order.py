@@ -182,6 +182,7 @@ async def handle_calendar_navigation(callback: CallbackQuery, state: FSMContext)
         reply_markup=keyboard,
     )
     await callback.answer()
+    await callback.message.delete()  # type: ignore
     return UNHANDLED
 
 
@@ -309,7 +310,6 @@ async def back_to_time(callback: CallbackQuery, state: FSMContext):
 def create_time_keyboard():
     """Создание клавиатуры для выбора времени"""
     times = [
-        "08:00",
         "09:00",
         "10:00",
         "11:00",
@@ -324,6 +324,7 @@ def create_time_keyboard():
         "20:00",
         "21:00",
         "22:00",
+        "23:00",
     ]
 
     keyboard = []
